@@ -25,40 +25,40 @@ static rq_t *tail = NULL;
 static void init() __attribute__((constructor));
 static void rq_enqueue(rq_t **h, rq_t **t, green_t *thread);
 static green_t *rq_dequeue(rq_t **h, rq_t **t);
-void timer_handler(int sig);
+// void timer_handler(int sig);
 
 void init() {
   getcontext(&main_cntx);
 
-  sigemptyset(&block);
-  sigaddset(&block, SIGVTALRM);
+  // sigemptyset(&block);
+  // sigaddset(&block, SIGVTALRM);
 
-  struct sigaction act = {0};
-  struct timeval interval;
-  struct itimerval period;
+  // struct sigaction act = {0};
+  // struct timeval interval;
+  // struct itimerval period;
 
-  act.sa_handler = timer_handler;
-  assert(sigaction(SIGVTALRM, &act, NULL) == 0);
-  interval.tv_sec = 0;
-  interval.tv_usec = PERIOD;
-  period.it_interval = interval;
-  period.it_value = interval;
-  setitimer(ITIMER_VIRTUAL, &period, NULL);
+  // act.sa_handler = timer_handler;
+  // assert(sigaction(SIGVTALRM, &act, NULL) == 0);
+  // interval.tv_sec = 0;
+  // interval.tv_usec = PERIOD;
+  // period.it_interval = interval;
+  // period.it_value = interval;
+  // setitimer(ITIMER_VIRTUAL, &period, NULL);
 }
 
-void timer_handler(int sig) {
-  write(1, "INT\n", 4);
-  green_t *susp = running;
-  rq_enqueue(&rq, &tail, susp);
-  green_t *next;
-  if (susp->next) {
-    next = susp->next;
-  } else {
-    next = rq_dequeue(&rq, &tail);
-  }
-  running = next;
-  swapcontext(susp->context, next->context);
-}
+// void timer_handler(int sig) {
+// write(1, "INT\n", 4);
+//   green_t *susp = running;
+//   rq_enqueue(&rq, &tail, susp);
+//   green_t *next;
+//   if (susp->next) {
+//     next = susp->next;
+//   } else {
+//     next = rq_dequeue(&rq, &tail);
+//   }
+//   running = next;
+//   swapcontext(susp->context, next->context);
+// }
 
 void rq_enqueue(rq_t **h, rq_t **t, green_t *thread) {
   rq_t *q = malloc(sizeof(rq_t));
@@ -88,66 +88,57 @@ green_t *rq_dequeue(rq_t **h, rq_t **t) {
   return thread;
 }
 
+green_t *sched_next() {
+  if (running->next) {
+    return running->next;
+  }
+
+  if (tail) {
+    return rq_dequeue(&rq, &tail);
+  }
+
+  return NULL;
+}
+
 void green_thread() {
-  // printf("%s:\tstart\n", __func__);
   green_t *this = running;
+
   void *result = (*this->fun)(this->arg);
-  // place waiting thread in ready queue
+  // place waiting (joining) thread in ready queue
   if (this->join) {
     rq_enqueue(&rq, &tail, this->join);
   }
   // save result of execution
-  // printf("%s:\tresult = %p\n", __func__, result);
   this->retval = result;
   // we're a zombie
   this->zombie = true;
   // find the next thread to run
-  green_t *next;
-  if (this->next) {
-    next = this->next;
-  } else {
-    next = rq_dequeue(&rq, &tail);
-  }
+  green_t *next = sched_next();
   running = next;
-  // printf("%s:\tend\n", __func__);
   setcontext(next->context);
 }
 
 int green_yield() {
   sigprocmask(SIG_BLOCK, &block, NULL);
-  // printf("%s:\tstart\n", __func__);
   green_t *susp = running;
   // add susp last in the ready queue
   rq_enqueue(&rq, &tail, susp);
   // select the next thread for execution
-  green_t *next;
-  if (susp->next) {
-    next = susp->next;
-  } else {
-    next = rq_dequeue(&rq, &tail);
-  }
+  green_t *next = sched_next();
   running = next;
   swapcontext(susp->context, next->context);
-  // printf("%s:\trunning = %p\n", __func__, running);
-  // printf("%s:\tend\n", __func__);
   sigprocmask(SIG_UNBLOCK, &block, NULL);
   return 0;
 }
 
 int green_join(green_t *thread, void **res) {
-  // printf("%s:\tstart\n", __func__);
   sigprocmask(SIG_BLOCK, &block, NULL);
   if (!thread->zombie) {
     green_t *susp = running;
     // add as joining thread
     thread->join = running;
     // select the next thread for execution
-    green_t *next;
-    if (thread->next) {
-      next = thread->next;
-    } else {
-      next = rq_dequeue(&rq, &tail);
-    }
+    green_t *next = sched_next();
     running = next;
     swapcontext(susp->context, next->context);
   }
@@ -158,13 +149,11 @@ int green_join(green_t *thread, void **res) {
   // free context
   free(thread->context);
   sigprocmask(SIG_UNBLOCK, &block, NULL);
-  // printf("%s:\tend\n", __func__);
   return 0;
 }
 
 int green_create(green_t *new, void *(*fun)(void *), void *arg) {
-  sigprocmask(SIG_BLOCK, &block, NULL);
-  // printf("%s:\tstart\n", __func__);
+  // sigprocmask(SIG_BLOCK, &block, NULL);
   ucontext_t *cntx = (ucontext_t *)malloc(sizeof(ucontext_t));
   getcontext(cntx);
 
@@ -182,10 +171,10 @@ int green_create(green_t *new, void *(*fun)(void *), void *arg) {
   new->retval = NULL;
   new->zombie = false;
 
+  // add new to the ready queue
   rq_enqueue(&rq, &tail, new);
 
-  sigprocmask(SIG_UNBLOCK, &block, NULL);
-  // printf("%s:\tend\n", __func__);
+  // sigprocmask(SIG_UNBLOCK, &block, NULL);
   return 0;
 }
 

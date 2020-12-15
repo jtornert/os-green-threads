@@ -3,9 +3,6 @@
 
 #include "green.h"
 
-#define thread(x) void *x(void *arg)
-#define get(x) *(x *)arg
-
 // yield
 void *test1(void *arg) {
   int i = *(int *)arg;
@@ -39,8 +36,8 @@ void *test2(void *arg) {
 int x = 0;
 
 // timer interrupt
-thread(test3) {
-  int id = get(int);
+void *test3(void *arg) {
+  int id = *(int *)arg;
   for (size_t i = 0; i < 1000000000; i++) {
     x++;
   }
@@ -49,8 +46,8 @@ thread(test3) {
 green_mutex_t mutex;
 
 // timer interrupt with mutex
-thread(test4) {
-  int id = get(int);
+void *test4(void *arg) {
+  int id = *(int *)arg;
   for (size_t i = 0; i < 10000; i++) {
     green_mutex_lock(&mutex);
     x++;
@@ -59,8 +56,8 @@ thread(test4) {
 }
 
 // timer interrupt with mutex and condition variable
-thread(test5) {
-  int id = get(int);
+void *test5(void *arg) {
+  int id = *(int *)arg;
   int loop = 4;
   while (loop > 0) {
     green_mutex_lock(&mutex);
