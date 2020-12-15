@@ -61,21 +61,21 @@ void init() {
 //   swapcontext(susp->context, next->context);
 // }
 
-void enqueue(green_t *thread) {
-  if (rq) {
-    green_t *it = rq;
+void enqueue(green_t **queue, green_t *thread) {
+  if (*queue) {
+    green_t *it = *queue;
     while (it->next != NULL) {
       it = it->next;
     }
     it->next = thread;
   } else {
-    rq = thread;
+    *queue = thread;
   }
 }
 
-green_t *dequeue() {
-  green_t *thread = rq;
-  rq = rq->next;
+green_t *dequeue(green_t **queue) {
+  green_t *thread = *queue;
+  *queue = (*queue)->next;
   thread->next = NULL;
   return thread;
 }
@@ -85,13 +85,13 @@ void green_thread() {
 
   void *result = (*this->fun)(this->arg);
   // place waiting (joining) thread in ready queue
-  enqueue(this->join);
+  enqueue(&rq, this->join);
   // save result of execution
   this->retval = result;
   // we're a zombie
   this->zombie = true;
   // find the next thread to run
-  green_t *next = dequeue();
+  green_t *next = dequeue(&rq);
   running = next;
   setcontext(next->context);
 }
@@ -100,9 +100,9 @@ int green_yield() {
   // sigprocmask(SIG_BLOCK, &block, NULL);
   green_t *susp = running;
   // add susp to ready queue
-  enqueue(susp);
+  enqueue(&rq, susp);
   // select the next thread for execution
-  green_t *next = dequeue();
+  green_t *next = dequeue(&rq);
   running = next;
   swapcontext(susp->context, next->context);
   // sigprocmask(SIG_UNBLOCK, &block, NULL);
@@ -116,7 +116,7 @@ int green_join(green_t *thread, void **res) {
     // add as joining thread
     thread->join = susp;
     // select the next thread for execution
-    green_t *next = dequeue();
+    green_t *next = dequeue(&rq);
     running = next;
     swapcontext(susp->context, next->context);
   }
@@ -132,7 +132,7 @@ int green_join(green_t *thread, void **res) {
 }
 
 int green_create(green_t *new, void *(*fun)(void *), void *arg) {
-  // // sigprocmask(SIG_BLOCK, &block, NULL);
+  // sigprocmask(SIG_BLOCK, &block, NULL);
   ucontext_t *cntx = (ucontext_t *)malloc(sizeof(ucontext_t));
   getcontext(cntx);
 
@@ -151,98 +151,46 @@ int green_create(green_t *new, void *(*fun)(void *), void *arg) {
   new->zombie = false;
 
   // add new to the ready queue
-  enqueue(new);
+  enqueue(&rq, new);
 
-  // // sigprocmask(SIG_UNBLOCK, &block, NULL);
+  // sigprocmask(SIG_UNBLOCK, &block, NULL);
 
   return 0;
 }
 
-// void green_cond_init(green_cond_t *cond) {
-//   // initialize condition variable
-//   // CALL;
-//   cond->threads = NULL;
-//   cond->next = NULL;
-//   // LOG printf("\tcond->threads = %p\tcond->next = %p\n", cond->threads,
-//   //  cond->next);
-//   // END;
-// }
+void green_cond_init(green_cond_t *cond) { cond->susp = NULL; }
 
-// void green_cond_signal(green_cond_t *cond) {
-//   // sigprocmask(SIG_BLOCK, &block, NULL);
-//   // signal the condition variable to wake up other threads
-//   // CALL;
-//   // LOG printf("size: %d\n", cond->size);
-//   if (cond->next != NULL) {
-//     // LOG printf("waiting threads: %p\n", cond->threads);
-//     green_t *thread = rq_dequeue(&(cond->threads), &(cond->next));
-//     green_t *susp = running;
-//     green_t *next;
-//     if (susp->next) {
-//       next = susp->next;
-//     } else {
-//       // LOG printf("switching to waiting thread...\n");
-//       next = thread;
-//       rq_enqueue(&rq, &tail, susp);
-//     }
-//     running = next;
-//     // END;
-//     swapcontext(susp->context, next->context);
-//   } else {
-//     // LOG printf("no waiting threads - continuing processing running
-//     // thread\n");
-//     // END;
-//   }
-//   // sigprocmask(SIG_UNBLOCK, &block, NULL);
+void green_cond_signal(green_cond_t *cond) {
+  // sigprocmask(SIG_BLOCK, &block, NULL);
+  if (cond->susp != NULL) {
+    green_t *next = dequeue(&(cond->susp));
+    green_t *susp = running;
+    enqueue(&rq, susp);
+    running = next;
+    swapcontext(susp->context, next->context);
+  }
+  // sigprocmask(SIG_UNBLOCK, &block, NULL);
+}
 
-// }
+int green_cond_wait(green_cond_t *cond) {
+  // block timer interrupt
+  // sigprocmask(SIG_BLOCK, &block, NULL);
+  // suspend the running thread on condition
+  green_t *susp = running;
+  green_t *next;
+  if (cond->susp) {
+    next = dequeue(&(cond->susp));
+  } else {
+    enqueue(&(cond->susp), susp);
+    next = dequeue(&rq);
+  }
+  running = next;
+  swapcontext(susp->context, next->context);
+  // unblock
+  // sigprocmask(SIG_UNBLOCK, &block, NULL);
 
-// int green_cond_wait(green_cond_t *cond, green_mutex_t *mutex) {
-//   // block timer interrupt
-//   // sigprocmask(SIG_BLOCK, &block, NULL);
-//   // suspend the running thread on condition
-//   green_t *susp = running;
-//   rq_enqueue(&(cond->threads), &(cond->next), susp);
-//   if (mutex != NULL) {
-//     // release the lock if we have a mutex
-//     green_mutex_unlock(mutex);
-//     // move suspended thread to ready queue
-//     rq_enqueue(&rq, &tail, susp);
-//   }
-//   // schedule the next thread
-//   green_t *next;
-//   if (susp->next) {
-//     next = susp->next;
-//   } else {
-//     next = rq_dequeue(&rq, &tail);
-//   }
-//   running = next;
-//   swapcontext(susp->context, next->context);
-
-//   if (mutex != NULL) {
-//     // try to take the lock
-//     if (mutex->taken) {
-//       // bad luck, suspend
-//       green_t *susp = running;
-//       rq_enqueue(&(mutex->threads), &(mutex->next), susp);
-//       // green_t *next;
-//       // if (susp->next) {
-//       //   next = susp->next;
-//       // } else {
-//       //   next = rq_dequeue(&rq, &tail);
-//       // }
-//       // running = next;
-//       // swapcontext(susp->context, next->context);
-//     } else {
-//       // take the lock
-//       mutex->taken = true;
-//     }
-//   }
-//   // unblock
-//   // sigprocmask(SIG_UNBLOCK, &block, NULL);
-
-//   return 0;
-// }
+  return 0;
+}
 
 // int green_mutex_init(green_mutex_t *mutex) {
 //   mutex->taken = false;
@@ -303,25 +251,25 @@ int green_create(green_t *new, void *(*fun)(void *), void *arg) {
 //   t3.next = NULL;
 //   t4.next = NULL;
 
-//   enqueue(&t0);
-//   enqueue(&t1);
-//   enqueue(&t2);
-//   enqueue(&t3);
+//   enqueue(&rq, &t0);
+//   enqueue(&rq, &t1);
+//   enqueue(&rq, &t2);
+//   enqueue(&rq, &t3);
 
 //   LOG printf("\tgot here: enqueued 4 elements\n");
 
-//   dequeue();
-//   dequeue();
-//   dequeue();
-//   dequeue();
+//   dequeue(&rq);
+//   dequeue(&rq);
+//   dequeue(&rq);
+//   dequeue(&rq);
 
 //   LOG printf("\tgot here: dequeued 4 elements\n");
 
-//   enqueue(&t4);
+//   enqueue(&rq, &t4);
 
 //   LOG printf("\tgot here: enqueued 1 element\n");
 
-//   dequeue();
+//   dequeue(&rq);
 
 //   LOG printf("\tgot here: dequeued 1 element\n");
 

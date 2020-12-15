@@ -14,24 +14,24 @@ void *test1(void *arg) {
   }
 }
 
-// int flag = 0;
-// green_cond_t cond;
+int flag = 0;
+green_cond_t cond;
 
-// // condition variables
-// void *test2(void *arg) {
-//   int id = *(int *)arg;
-//   int loop = 4;
-//   while (loop > 0) {
-//     if (flag == id) {
-//       printf("thread %d: %d\n", id, loop);
-//       loop--;
-//       flag = (id + 1) % 2;
-//       green_cond_signal(&cond);
-//     } else {
-//       green_cond_wait(&cond, NULL);
-//     }
-//   }
-// }
+// condition variables
+void *test2(void *arg) {
+  int id = *(int *)arg;
+  int loop = 4;
+  while (loop > 0) {
+    if (flag == id) {
+      printf("thread %d: %d\n", id, loop);
+      loop--;
+      flag = (id + 1) % 2;
+      green_cond_signal(&cond);
+    } else {
+      green_cond_wait(&cond);
+    }
+  }
+}
 
 // int x = 0;
 
@@ -73,13 +73,13 @@ void *test1(void *arg) {
 // }
 
 int main(int argc, char const *argv[]) {
-  // green_cond_init(&cond);
+  green_cond_init(&cond);
   // green_mutex_init(&mutex);
   green_t g0, g1;
   int a0 = 0;
   int a1 = 1;
-  green_create(&g0, test1, &a0);
-  green_create(&g1, test1, &a1);
+  green_create(&g0, test2, &a0);
+  green_create(&g1, test2, &a1);
 
   green_join(&g0, NULL);
   green_join(&g1, NULL);
