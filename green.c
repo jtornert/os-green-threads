@@ -24,42 +24,39 @@ static green_t *rq = NULL;
 static sigset_t block;
 
 static void init() __attribute__((constructor));
-// static void rq_enqueue(rq_t **h, rq_t **t, green_t *thread);
-// static green_t *rq_dequeue(rq_t **h, rq_t **t);
-// void timer_handler(int sig);
+static void enqueue(green_t **queue, green_t *thread);
+static green_t *dequeue(green_t **queue);
+static void timer_handler(int sig);
 
 void init() {
   getcontext(&main_cntx);
 
-  // sigemptyset(&block);
-  // sigaddset(&block, SIGVTALRM);
+  sigemptyset(&block);
+  sigaddset(&block, SIGALRM);
 
-  // struct sigaction act = {0};
-  // struct timeval interval;
-  // struct itimerval period;
+  struct sigaction act = {0};
+  struct timeval interval;
+  struct itimerval period;
 
-  // act.sa_handler = timer_handler;
-  // assert(sigaction(SIGVTALRM, &act, NULL) == 0);
-  // interval.tv_sec = 0;
-  // interval.tv_usec = PERIOD;
-  // period.it_interval = interval;
-  // period.it_value = interval;
-  // setitimer(ITIMER_VIRTUAL, &period, NULL);
+  act.sa_handler = timer_handler;
+  assert(sigaction(SIGALRM, &act, NULL) == 0);
+  interval.tv_sec = 0;
+  interval.tv_usec = PERIOD;
+  period.it_interval = interval;
+  period.it_value = interval;
+  setitimer(ITIMER_REAL, &period, NULL);
 }
 
-// void timer_handler(int sig) {
-// write(1, "INT\n", 4);
-//   green_t *susp = running;
-//   rq_enqueue(&rq, &tail, susp);
-//   green_t *next;
-//   if (susp->next) {
-//     next = susp->next;
-//   } else {
-//     next = rq_dequeue(&rq, &tail);
-//   }
-//   running = next;
-//   swapcontext(susp->context, next->context);
-// }
+void timer_handler(int sig) {
+  sigprocmask(SIG_BLOCK, &block, NULL);
+  // write(1, "INT\n", 4);
+  green_t *susp = running;
+  enqueue(&rq, susp);
+  green_t *next = dequeue(&rq);
+  running = next;
+  swapcontext(susp->context, next->context);
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
+}
 
 void enqueue(green_t **queue, green_t *thread) {
   if (*queue) {
@@ -67,7 +64,9 @@ void enqueue(green_t **queue, green_t *thread) {
     while (it->next != NULL) {
       it = it->next;
     }
-    it->next = thread;
+    if (it != thread) {
+      it->next = thread;
+    }
   } else {
     *queue = thread;
   }
@@ -85,6 +84,7 @@ void green_thread() {
 
   void *result = (*this->fun)(this->arg);
   // place waiting (joining) thread in ready queue
+  sigprocmask(SIG_BLOCK, &block, NULL);
   enqueue(&rq, this->join);
   // save result of execution
   this->retval = result;
@@ -94,23 +94,25 @@ void green_thread() {
   green_t *next = dequeue(&rq);
   running = next;
   setcontext(next->context);
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
 }
 
 int green_yield() {
-  // sigprocmask(SIG_BLOCK, &block, NULL);
+  sigprocmask(SIG_BLOCK, &block, NULL);
   green_t *susp = running;
   // add susp to ready queue
   enqueue(&rq, susp);
   // select the next thread for execution
   green_t *next = dequeue(&rq);
+  // sigprocmask(SIG_UNBLOCK, &block, NULL);
   running = next;
   swapcontext(susp->context, next->context);
-  // sigprocmask(SIG_UNBLOCK, &block, NULL);
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
   return 0;
 }
 
 int green_join(green_t *thread, void **res) {
-  // sigprocmask(SIG_BLOCK, &block, NULL);
+  sigprocmask(SIG_BLOCK, &block, NULL);
   if (!thread->zombie) {
     green_t *susp = running;
     // add as joining thread
@@ -126,8 +128,7 @@ int green_join(green_t *thread, void **res) {
   }
   // free context
   free(thread->context);
-  // sigprocmask(SIG_UNBLOCK, &block, NULL);
-
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
   return 0;
 }
 
@@ -158,10 +159,14 @@ int green_create(green_t *new, void *(*fun)(void *), void *arg) {
   return 0;
 }
 
-void green_cond_init(green_cond_t *cond) { cond->susp = NULL; }
+void green_cond_init(green_cond_t *cond) {
+  sigprocmask(SIG_BLOCK, &block, NULL);
+  cond->susp = NULL;
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
+}
 
 void green_cond_signal(green_cond_t *cond) {
-  // sigprocmask(SIG_BLOCK, &block, NULL);
+  sigprocmask(SIG_BLOCK, &block, NULL);
   if (cond->susp != NULL) {
     green_t *next = dequeue(&(cond->susp));
     green_t *susp = running;
@@ -169,12 +174,12 @@ void green_cond_signal(green_cond_t *cond) {
     running = next;
     swapcontext(susp->context, next->context);
   }
-  // sigprocmask(SIG_UNBLOCK, &block, NULL);
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
 }
 
 int green_cond_wait(green_cond_t *cond) {
   // block timer interrupt
-  // sigprocmask(SIG_BLOCK, &block, NULL);
+  sigprocmask(SIG_BLOCK, &block, NULL);
   // suspend the running thread on condition
   green_t *susp = running;
   green_t *next;
@@ -187,8 +192,7 @@ int green_cond_wait(green_cond_t *cond) {
   running = next;
   swapcontext(susp->context, next->context);
   // unblock
-  // sigprocmask(SIG_UNBLOCK, &block, NULL);
-
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
   return 0;
 }
 
@@ -242,6 +246,20 @@ int green_cond_wait(green_cond_t *cond) {
 //   return 0;
 // }
 
+// void print() {
+//   if (!rq) {
+//     printf("[]\n");
+//     return;
+//   }
+
+//   putchar('[');
+//   green_t *it = rq;
+//   for (; it->next; it = it->next) {
+//     printf("%p, ", it);
+//   }
+//   printf("%p]\n", it);
+// }
+
 // int main(int argc, char const *argv[]) {
 //   // sigprocmask(SIG_BLOCK, &block, NULL);
 //   green_t t0, t1, t2, t3, t4;
@@ -252,24 +270,36 @@ int green_cond_wait(green_cond_t *cond) {
 //   t4.next = NULL;
 
 //   enqueue(&rq, &t0);
+//   print();
 //   enqueue(&rq, &t1);
+//   print();
 //   enqueue(&rq, &t2);
+//   print();
 //   enqueue(&rq, &t3);
+//   print();
 
 //   LOG printf("\tgot here: enqueued 4 elements\n");
 
 //   dequeue(&rq);
+//   print();
 //   dequeue(&rq);
+//   print();
 //   dequeue(&rq);
+//   print();
 //   dequeue(&rq);
+//   print();
 
 //   LOG printf("\tgot here: dequeued 4 elements\n");
 
 //   enqueue(&rq, &t4);
+//   print();
 
 //   LOG printf("\tgot here: enqueued 1 element\n");
 
-//   dequeue(&rq);
+//   green_t *thread = dequeue(&rq);
+//   print();
+
+//   printf("thread->next: %p\n", thread->next);
 
 //   LOG printf("\tgot here: dequeued 1 element\n");
 

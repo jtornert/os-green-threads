@@ -33,15 +33,33 @@ void *test2(void *arg) {
   }
 }
 
-// int x = 0;
+size_t x = 0;
 
-// // timer interrupt
-// void *test3(void *arg) {
-//   int id = *(int *)arg;
-//   for (size_t i = 0; i < 1000000000; i++) {
-//     x++;
-//   }
-// }
+// timer interrupt
+void *test3(void *arg) {
+  int id = *(int *)arg;
+  for (size_t i = 0; i < 100000000; i++) {
+    x++;
+  }
+}
+
+void *test4(void *arg) {
+  int id = *(int *)arg;
+  int loop = 4;
+  char buffer[256];
+  while (loop > 0) {
+    if (flag == id) {
+      // sprintf(buffer, "thread %d: %d\n", id, loop);
+      // int length = strlen(buffer);
+      // write(1, buffer, length);
+      loop--;
+      flag = (id + 1) % 2;
+      green_cond_signal(&cond);
+    } else {
+      green_cond_wait(&cond);
+    }
+  }
+}
 
 // green_mutex_t mutex;
 
@@ -78,12 +96,12 @@ int main(int argc, char const *argv[]) {
   green_t g0, g1;
   int a0 = 0;
   int a1 = 1;
-  green_create(&g0, test2, &a0);
-  green_create(&g1, test2, &a1);
+  green_create(&g0, test3, &a0);
+  green_create(&g1, test3, &a1);
 
   green_join(&g0, NULL);
   green_join(&g1, NULL);
-  // printf("x: %d\n", x);
+  printf("x: %ld\n", x);
   printf("done\n");
   return 0;
 }
