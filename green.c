@@ -177,7 +177,7 @@ void green_cond_signal(green_cond_t *cond) {
   sigprocmask(SIG_UNBLOCK, &block, NULL);
 }
 
-int green_cond_wait(green_cond_t *cond) {
+int green_cond_wait(green_cond_t *cond, green_mutex_t *mutex) {
   // block timer interrupt
   sigprocmask(SIG_BLOCK, &block, NULL);
   // suspend the running thread on condition
