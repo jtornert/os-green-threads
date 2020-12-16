@@ -67,7 +67,7 @@ green_mutex_t mutex;
 void *test5(void *arg) {
   int id = *(int *)arg;
   int failed;
-  for (size_t i = 0; i < 100000; i++) {
+  for (size_t i = 0; i < 10000; i++) {
     green_mutex_lock(&mutex);
     x++;
     green_mutex_unlock(&mutex);
