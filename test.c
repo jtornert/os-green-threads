@@ -93,7 +93,7 @@ void *test5(void *arg) {
 
 int main(int argc, char const *argv[]) {
   green_cond_init(&cond);
-  // green_mutex_init(&mutex);
+  green_mutex_init(&mutex);
   green_t g0, g1;
   int a0 = 0;
   int a1 = 1;
