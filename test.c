@@ -102,7 +102,7 @@ int main(int argc, char const *argv[]) {
 
   green_join(&g0, NULL);
   green_join(&g1, NULL);
-  printf("x: %ld\n", x);
+  // printf("x: %ld\n", x);
   printf("done\n");
   return 0;
 }

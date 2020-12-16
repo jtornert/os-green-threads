@@ -49,10 +49,10 @@ void init() {
 
 void timer_handler(int sig) {
   sigprocmask(SIG_BLOCK, &block, NULL);
-  // write(1, "INT\n", 4);
   green_t *susp = running;
   enqueue(&rq, susp);
   green_t *next = dequeue(&rq);
+  LOG printf("\tcontinuing at %p\n", next);
   running = next;
   swapcontext(susp->context, next->context);
   sigprocmask(SIG_UNBLOCK, &block, NULL);
@@ -167,6 +167,7 @@ void green_cond_init(green_cond_t *cond) {
 
 void green_cond_signal(green_cond_t *cond) {
   sigprocmask(SIG_BLOCK, &block, NULL);
+  CALL;
   if (cond->susp != NULL) {
     green_t *next = dequeue(&(cond->susp));
     green_t *susp = running;
@@ -174,24 +175,51 @@ void green_cond_signal(green_cond_t *cond) {
     running = next;
     swapcontext(susp->context, next->context);
   }
+  END;
   sigprocmask(SIG_UNBLOCK, &block, NULL);
 }
 
 int green_cond_wait(green_cond_t *cond, green_mutex_t *mutex) {
   // block timer interrupt
   sigprocmask(SIG_BLOCK, &block, NULL);
+  CALL;
   // suspend the running thread on condition
   green_t *susp = running;
   green_t *next;
   if (cond->susp) {
+    LOG printf("\tattempting dequeue 1 - cond->susp: %p\n", cond->susp);
     next = dequeue(&(cond->susp));
   } else {
     enqueue(&(cond->susp), susp);
+    LOG printf("\tattempting dequeue 2 - rq: %p\n", rq);
     next = dequeue(&rq);
   }
+  if (mutex != NULL) {
+    // release the lock if we have a mutex
+    mutex->taken = false;
+    // move suspended thread to ready queue
+    enqueue(&rq, susp);
+  }
+  // schedule the next thread
   running = next;
   swapcontext(susp->context, next->context);
+  if (mutex != NULL) {
+    // try to take the lock
+    if (mutex->taken) {
+      // bad luck, suspend
+      susp = running;
+      enqueue(&(mutex->susp), susp);
+      LOG printf("\tattempting dequeue 3 - rq: %p\n", rq);
+      next = dequeue(&(mutex->susp));
+      running = next;
+      swapcontext(susp->context, next->context);
+    } else {
+      // take the lock
+      __sync_val_compare_and_swap(&(mutex->taken), false, true);
+    }
+  }
   // unblock
+  END;
   sigprocmask(SIG_UNBLOCK, &block, NULL);
   return 0;
 }
@@ -206,18 +234,27 @@ int green_mutex_init(green_mutex_t *mutex) {
 int green_mutex_lock(green_mutex_t *mutex) {
   // block timer interrupt
   sigprocmask(SIG_BLOCK, &block, NULL);
+  CALL;
   if (mutex->taken) {
+    LOG printf("mutex locked by another thread\n");
     // suspend the running thread
     green_t *susp = running;
     enqueue(&(mutex->susp), susp);
     // find the next thread
+    LOG printf("attempting dequeue - rq: %p\n", rq);
     green_t *next = dequeue(&rq);
     running = next;
     swapcontext(susp->context, next->context);
   } else {
     // take the lock
     __sync_val_compare_and_swap(&(mutex->taken), false, true);
+    if (mutex->taken) {
+      LOG printf("lock aquired\n");
+    } else {
+      LOG printf("lock failed\n");
+    }
   }
+  END;
   sigprocmask(SIG_UNBLOCK, &block, NULL);
   return 0;
 }
@@ -225,6 +262,7 @@ int green_mutex_lock(green_mutex_t *mutex) {
 int green_mutex_unlock(green_mutex_t *mutex) {
   // block timer interrupt
   sigprocmask(SIG_BLOCK, &block, NULL);
+  CALL;
   if (mutex->susp != NULL) {
     // move suspended thread to ready queue
     green_t *susp = dequeue(&(mutex->susp));
@@ -232,8 +270,10 @@ int green_mutex_unlock(green_mutex_t *mutex) {
   } else {
     // release lock
     mutex->taken = false;
+    LOG printf("unlocked mutex\n");
   }
   // unblock
+  END;
   sigprocmask(SIG_UNBLOCK, &block, NULL);
   return 0;
 }
