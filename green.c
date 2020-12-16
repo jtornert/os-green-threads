@@ -196,55 +196,47 @@ int green_cond_wait(green_cond_t *cond) {
   return 0;
 }
 
-// int green_mutex_init(green_mutex_t *mutex) {
-//   mutex->taken = false;
-//   mutex->threads = NULL;
-//   mutex->next = NULL;
-// }
+int green_mutex_init(green_mutex_t *mutex) {
+  sigprocmask(SIG_BLOCK, &block, NULL);
+  mutex->taken = false;
+  mutex->susp = NULL;
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
+}
 
-// int green_mutex_lock(green_mutex_t *mutex) {
-//   // block timer interrupt
-//   // sigprocmask(SIG_BLOCK, &block, NULL);
-//   // CALL;
-//   if (mutex->taken) {
-//     green_t *susp = running;
-//     // suspend the running thread
-//     rq_enqueue(&(mutex->threads), &(mutex->next), susp);
-//     // find the next thread
-//     green_t *next;
-//     if (susp->next) {
-//       next = susp->next;
-//     } else {
-//       next = rq_dequeue(&rq, &tail);
-//     }
-//     running = next;
-//     // LOG printf("running next thread...\n");
-//     swapcontext(susp->context, next->context);
-//   } else {
-//     mutex->taken = true;
-//   }
-//   // END;
-//   // sigprocmask(SIG_UNBLOCK, &block, NULL);
+int green_mutex_lock(green_mutex_t *mutex) {
+  // block timer interrupt
+  sigprocmask(SIG_BLOCK, &block, NULL);
+  if (mutex->taken) {
+    // suspend the running thread
+    green_t *susp = running;
+    enqueue(&(mutex->susp), susp);
+    // find the next thread
+    green_t *next = dequeue(&rq);
+    running = next;
+    swapcontext(susp->context, next->context);
+  } else {
+    // take the lock
+    __sync_val_compare_and_swap(&(mutex->taken), false, true);
+  }
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
+  return 0;
+}
 
-//   return 0;
-// }
-
-// int green_mutex_unlock(green_mutex_t *mutex) {
-//   // block timer interrupt
-//   // sigprocmask(SIG_BLOCK, &block, NULL);
-//   if (mutex->next != NULL) {
-//     // move suspended thread to ready queue
-//     green_t *susp = rq_dequeue(&(mutex->threads), &(mutex->next));
-//     rq_enqueue(&rq, &tail, susp);
-//   } else {
-//     // release lock
-//     mutex->taken = false;
-//   }
-//   // unblock
-//   // sigprocmask(SIG_UNBLOCK, &block, NULL);
-
-//   return 0;
-// }
+int green_mutex_unlock(green_mutex_t *mutex) {
+  // block timer interrupt
+  sigprocmask(SIG_BLOCK, &block, NULL);
+  if (mutex->susp != NULL) {
+    // move suspended thread to ready queue
+    green_t *susp = dequeue(&(mutex->susp));
+    enqueue(&rq, susp);
+  } else {
+    // release lock
+    mutex->taken = false;
+  }
+  // unblock
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
+  return 0;
+}
 
 // void print() {
 //   if (!rq) {

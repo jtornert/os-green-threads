@@ -61,17 +61,18 @@ void *test4(void *arg) {
   }
 }
 
-// green_mutex_t mutex;
+green_mutex_t mutex;
 
-// // timer interrupt with mutex
-// void *test4(void *arg) {
-//   int id = *(int *)arg;
-//   for (size_t i = 0; i < 10000; i++) {
-//     green_mutex_lock(&mutex);
-//     x++;
-//     green_mutex_unlock(&mutex);
-//   }
-// }
+// timer interrupt with mutex
+void *test5(void *arg) {
+  int id = *(int *)arg;
+  int failed;
+  for (size_t i = 0; i < 100000; i++) {
+    green_mutex_lock(&mutex);
+    x++;
+    green_mutex_unlock(&mutex);
+  }
+}
 
 // // timer interrupt with mutex and condition variable
 // void *test5(void *arg) {
@@ -96,8 +97,8 @@ int main(int argc, char const *argv[]) {
   green_t g0, g1;
   int a0 = 0;
   int a1 = 1;
-  green_create(&g0, test3, &a0);
-  green_create(&g1, test3, &a1);
+  green_create(&g0, test5, &a0);
+  green_create(&g1, test5, &a1);
 
   green_join(&g0, NULL);
   green_join(&g1, NULL);
