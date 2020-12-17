@@ -1,4 +1,6 @@
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "green.h"
@@ -46,12 +48,12 @@ void *test3(void *arg) {
 void *test4(void *arg) {
   int id = *(int *)arg;
   int loop = 4;
-  char buffer[256];
+  // char buffer[256];
   while (loop > 0) {
     if (flag == id) {
-      sprintf(buffer, "thread %d: %d\n", id, loop);
-      int length = strlen(buffer);
-      write(1, buffer, length);
+      // sprintf(buffer, "thread %d: %d\n", id, loop);
+      // int length = strlen(buffer);
+      // write(1, buffer, length);
       loop--;
       flag = (id + 1) % 2;
       green_cond_signal(&cond);
@@ -91,18 +93,37 @@ void *test6(void *arg) {
   }
 }
 
+char *name = NULL;
+char *pass = NULL;
+
+void *test7(void *arg) {
+  int id = *(int *)arg;
+  green_mutex_lock(&mutex);
+  name = malloc(32);
+  green_cond_signal(&cond);
+}
+
+void *test8(void *arg) {
+  int id = *(int *)arg;
+  green_cond_wait(&cond, &mutex);
+  strcpy(name, "Hapalopaloucha wangamangabanga");
+}
+
 int main(int argc, char const *argv[]) {
   green_cond_init(&cond);
   green_mutex_init(&mutex);
   green_t g0, g1;
   int a0 = 0;
   int a1 = 1;
-  green_create(&g0, test6, &a0);
-  green_create(&g1, test6, &a1);
+  green_create(&g0, test7, &a0);
+  green_create(&g1, test8, &a1);
 
   green_join(&g0, NULL);
   green_join(&g1, NULL);
   // printf("x: %ld\n", x);
+  // assert(cond.susp == NULL);
+  // assert(mutex.susp == NULL);
+  printf("%s\n", name);
   printf("done\n");
   return 0;
 }

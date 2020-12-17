@@ -61,10 +61,14 @@ void timer_handler(int sig) {
 void enqueue(green_t **queue, green_t *thread) {
   if (*queue) {
     green_t *it = *queue;
+    int passed = (it == thread) ? true : false;
     while (it->next != NULL) {
       it = it->next;
+      if (it == thread) {
+        passed = true;
+      }
     }
-    if (it != thread) {
+    if (!passed && it != thread) {
       it->next = thread;
     }
   } else {
@@ -123,9 +127,7 @@ int green_join(green_t *thread, void **res) {
     swapcontext(susp->context, next->context);
   }
   // collect result
-  if (res) {
-    *res = thread->retval;
-  }
+  if (res) *res = thread->retval;
   // free context
   free(thread->context);
   sigprocmask(SIG_UNBLOCK, &block, NULL);
@@ -185,7 +187,7 @@ int green_cond_wait(green_cond_t *cond, green_mutex_t *mutex) {
   enqueue(&(cond->susp), susp);
   if (mutex != NULL) {
     // release the lock if we have a mutex
-    assert(__sync_val_compare_and_swap(&(mutex->taken), true, false));
+    mutex->taken = false;
     // move suspended thread to ready queue
     enqueue(&rq, susp);
   }
@@ -204,7 +206,7 @@ int green_cond_wait(green_cond_t *cond, green_mutex_t *mutex) {
       swapcontext(susp->context, next->context);
     } else {
       // take the lock
-      assert(!__sync_val_compare_and_swap(&(mutex->taken), false, true));
+      mutex->taken = true;
     }
   }
   // unblock
@@ -232,7 +234,7 @@ int green_mutex_lock(green_mutex_t *mutex) {
     swapcontext(susp->context, next->context);
   } else {
     // take the lock
-    assert(!__sync_val_compare_and_swap(&(mutex->taken), false, true));
+    mutex->taken = true;
   }
   // END;
   sigprocmask(SIG_UNBLOCK, &block, NULL);
@@ -248,7 +250,7 @@ int green_mutex_unlock(green_mutex_t *mutex) {
     enqueue(&rq, susp);
   } else {
     // release lock
-    assert(__sync_val_compare_and_swap(&(mutex->taken), true, false));
+    mutex->taken = false;
   }
   // unblock
   sigprocmask(SIG_UNBLOCK, &block, NULL);

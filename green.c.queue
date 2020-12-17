@@ -1,0 +1,6 @@
+...
+static green_t *rq = NULL;
+
+static void enqueue(green_t **queue, green_t *thread);
+static green_t *dequeue(green_t **queue);
+...

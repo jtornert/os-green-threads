@@ -1,3 +1,6 @@
+#ifndef GREEN_H
+#define GREEN_H
+
 #include <ucontext.h>
 
 typedef struct green_t {
@@ -30,3 +33,5 @@ void green_cond_signal(green_cond_t *cond);
 int green_mutex_init(green_mutex_t *mutex);
 int green_mutex_lock(green_mutex_t *mutex);
 int green_mutex_unlock(green_mutex_t *mutex);
+
+#endif  // GREEN_H
