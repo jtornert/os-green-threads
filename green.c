@@ -29,25 +29,23 @@ static void enqueue(green_t **queue, green_t *thread);
 static green_t *dequeue(green_t **queue);
 static void timer_handler(int sig);
 
-char msg[256];
-
 void init() {
   getcontext(&main_cntx);
 
   sigemptyset(&block);
-  sigaddset(&block, SIGALRM);
+  sigaddset(&block, SIGVTALRM);
 
   struct sigaction act = {0};
   struct timeval interval;
   struct itimerval period;
 
   act.sa_handler = timer_handler;
-  assert(sigaction(SIGALRM, &act, NULL) == 0);
+  assert(sigaction(SIGVTALRM, &act, NULL) == 0);
   interval.tv_sec = 0;
   interval.tv_usec = PERIOD;
   period.it_interval = interval;
   period.it_value = interval;
-  setitimer(ITIMER_REAL, &period, NULL);
+  setitimer(ITIMER_VIRTUAL, &period, NULL);
 }
 
 void timer_handler(int sig) {

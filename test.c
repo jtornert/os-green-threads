@@ -43,23 +43,23 @@ void *test3(void *arg) {
   }
 }
 
-// void *test4(void *arg) {
-//   int id = *(int *)arg;
-//   int loop = 4;
-//   char buffer[256];
-//   while (loop > 0) {
-//     if (flag == id) {
-//       // sprintf(buffer, "thread %d: %d\n", id, loop);
-//       // int length = strlen(buffer);
-//       // write(1, buffer, length);
-//       loop--;
-//       flag = (id + 1) % 2;
-//       green_cond_signal(&cond);
-//     } else {
-//       green_cond_wait(&cond);
-//     }
-//   }
-// }
+void *test4(void *arg) {
+  int id = *(int *)arg;
+  int loop = 4;
+  char buffer[256];
+  while (loop > 0) {
+    if (flag == id) {
+      sprintf(buffer, "thread %d: %d\n", id, loop);
+      int length = strlen(buffer);
+      write(1, buffer, length);
+      loop--;
+      flag = (id + 1) % 2;
+      green_cond_signal(&cond);
+    } else {
+      green_cond_wait(&cond, NULL);
+    }
+  }
+}
 
 green_mutex_t mutex;
 
