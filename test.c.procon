@@ -1,0 +1,59 @@
+#include <stdio.h>
+#include "green.h"
+#define MAX (4 * 1024)
+
+int buffer[MAX];          int fill_ptr = 0;
+int use_ptr  = 0;         int count    = 0;
+int loops    = 10000000;
+
+green_cond_t empty, fill; green_mutex_t mutex;
+
+void put(int value) {
+  buffer[fill_ptr] = value;
+  fill_ptr = (fill_ptr + 1) % MAX;
+  count++;
+}
+
+int get() {
+  int tmp = buffer[use_ptr];
+  use_ptr = (use_ptr + 1) % MAX;
+  count--;
+  return tmp;
+}
+
+void *producer(void *arg) {
+  for (int i = 0; i < loops; i++) {
+    green_mutex_lock(&mutex);
+    while(count == MAX) {
+      green_cond_wait(&empty, &mutex);
+    }
+    put(i);
+    green_cond_signal(&fill);
+    green_mutex_unlock(&mutex);
+  }
+}
+
+void *consumer(void *arg) {
+  for (int i = 0; i < loops; i++) {
+    green_mutex_lock(&mutex);
+    while (count == 0) {
+      green_cond_wait(&fill, &mutex);
+    }
+    int tmp = get();
+    green_cond_signal(&empty);
+    green_mutex_unlock(&mutex);
+  }
+}
+
+int main() {
+  green_cond_init(&empty);
+  green_cond_init(&fill);
+  green_mutex_init(&mutex);
+  green_t g0, g1;
+  green_create(&g0, producer, NULL);
+  green_create(&g1, consumer, NULL);
+  
+  green_join(&g0, NULL);
+  green_join(&g1, NULL);
+  printf("done\n");
+}
