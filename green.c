@@ -135,11 +135,14 @@ int green_join(green_t *thread, void **res) {
 }
 
 int green_create(green_t *new, void *(*fun)(void *), void *arg) {
-  // sigprocmask(SIG_BLOCK, &block, NULL);
+  sigprocmask(SIG_BLOCK, &block, NULL);
   ucontext_t *cntx = (ucontext_t *)malloc(sizeof(ucontext_t));
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
   getcontext(cntx);
 
+  sigprocmask(SIG_BLOCK, &block, NULL);
   void *stack = malloc(STACK_SIZE);
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
 
   cntx->uc_stack.ss_sp = stack;
   cntx->uc_stack.ss_size = STACK_SIZE;
@@ -154,9 +157,9 @@ int green_create(green_t *new, void *(*fun)(void *), void *arg) {
   new->zombie = false;
 
   // add new to the ready queue
+  sigprocmask(SIG_BLOCK, &block, NULL);
   enqueue(&rq, new);
-
-  // sigprocmask(SIG_UNBLOCK, &block, NULL);
+  sigprocmask(SIG_UNBLOCK, &block, NULL);
 
   return 0;
 }
