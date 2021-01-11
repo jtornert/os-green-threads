@@ -60,17 +60,18 @@ void timer_handler(int sig) {
 
 void enqueue(green_t **queue, green_t *thread) {
   if (*queue) {
+    // <queue> exists and is non-empty
     green_t *it = *queue;
+    // check if <thread> is the first element
     int passed = (it == thread) ? true : false;
     while (it->next != NULL) {
       it = it->next;
-      if (it == thread) {
-        passed = true;
-      }
+      // check if <thread> is inside of the list
+      if (it == thread) passed = true;
     }
-    if (!passed && it != thread) {
-      it->next = thread;
-    }
+    // check if <thread> is the last element
+    // add <thread> only if <thread> has not been seen before to avoid loops
+    if (!passed && it != thread) it->next = thread;
   } else {
     *queue = thread;
   }
@@ -79,6 +80,7 @@ void enqueue(green_t **queue, green_t *thread) {
 green_t *dequeue(green_t **queue) {
   green_t *thread = *queue;
   *queue = (*queue)->next;
+  // make sure the thread does not appear as part of the queue
   thread->next = NULL;
   return thread;
 }
