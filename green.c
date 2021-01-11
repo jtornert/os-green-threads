@@ -237,7 +237,6 @@ int green_mutex_lock(green_mutex_t *mutex) {
     swapcontext(susp->context, next->context);
   } else {
     // take the lock
-
     mutex->taken = true;
   }
   // END;
